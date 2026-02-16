@@ -1,0 +1,661 @@
+// HRMS - Attendance - Payroll System Database Schema
+// Designed for CognitBotz HRMS
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER & AUTHENTICATION ====================
+
+model User {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  email           String      @unique
+  password        String
+  role            String      @default("EMPLOYEE")
+  status          String      @default("ACTIVE")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  lastLoginAt     DateTime?
+  
+  // Password Reset
+  resetPasswordToken   String?
+  resetPasswordExpires DateTime?
+  
+  // Relations
+  employee        Employee?
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  sessions        Session[]
+  accounts        Account[]
+  
+  @@index([role])
+  @@index([status])
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==================== ORGANIZATION ====================
+
+model Department {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  name        String     @unique
+  code        String     @unique
+  description String?
+  managerId   String?    @db.ObjectId
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  // Relations
+  employees   Employee[]
+}
+
+model Designation {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  name        String     @unique
+  code        String     @unique
+  level       Int        @default(1)
+  description String?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  // Relations
+  employees   Employee[]
+}
+
+// ==================== EMPLOYEE ====================
+
+model Employee {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId        String      @unique
+  userId            String      @unique @db.ObjectId
+  firstName         String
+  lastName          String
+  email             String      @unique
+  phone             String?
+  dateOfBirth       DateTime?
+  gender            String?
+  address           String?
+  city              String?
+  state             String?
+  country           String?
+  postalCode        String?
+  emergencyContact  String?
+  emergencyPhone    String?
+  
+  // Employment Details
+  departmentId      String      @db.ObjectId
+  designationId     String      @db.ObjectId
+  reportingManagerId String?    @db.ObjectId
+  joiningDate       DateTime
+  confirmationDate  DateTime?
+  resignationDate   DateTime?
+  lastWorkingDate   DateTime?
+  employmentType    String      @default("FULL_TIME")
+  
+  // Shift Assignment
+  shiftId           String?     @db.ObjectId
+  
+  // Profile
+  profileImage      String?
+  
+  // Timestamps
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  // Relations
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department        Department  @relation(fields: [departmentId], references: [id])
+  designation       Designation @relation(fields: [designationId], references: [id])
+  reportingManager  Employee?   @relation("EmployeeManager", fields: [reportingManagerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reportees         Employee[]  @relation("EmployeeManager")
+  shift             Shift?      @relation(fields: [shiftId], references: [id])
+  
+  // Related Records
+  attendanceRecords Attendance[]
+  leaveRequests     LeaveRequest[]
+  leaveApprovals    LeaveApproval[]
+  leaveBalances     LeaveBalance[]
+  salaryStructure   SalaryStructure?
+  payrollRecords    PayrollRecord[]
+  offerLetters      OfferLetter[]
+  wfhRequests       WFHRequest[]
+  wfhApprovals      WFHRequest[] @relation("WFHApprover")
+  
+  @@index([departmentId])
+  @@index([designationId])
+  @@index([reportingManagerId])
+}
+
+// ==================== SHIFT MANAGEMENT ====================
+
+model Shift {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  name            String    @unique
+  code            String?
+  type            String    @default("GENERAL")
+  startTime       String    // Format: "HH:mm"
+  endTime         String    // Format: "HH:mm"
+  graceMinutes    Int       @default(15)
+  halfDayMinutes  Int       @default(240) // 4 hours
+  workingHours    Float     @default(8)
+  breakMinutes    Int       @default(60)
+  isOvernight     Boolean   @default(false)
+  isFlexible      Boolean   @default(false)
+  flexibleHours   Int?
+  weekDays        String?   // JSON array stored as string
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  employees       Employee[]
+}
+
+// ==================== ATTENDANCE ====================
+
+model Attendance {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId        String           @db.ObjectId
+  date              DateTime
+  
+  // Check-in/out times
+  checkInTime       DateTime?
+  checkOutTime      DateTime?
+  
+  // Calculated values
+  workingHours      Float?
+  effectiveHours    Float?
+  overtime          Float?           @default(0)
+  
+  // Status flags
+  status            String           @default("ABSENT")
+  isLateLogin       Boolean          @default(false)
+  lateByMinutes     Int              @default(0)
+  isEarlyLogout     Boolean          @default(false)
+  earlyByMinutes    Int              @default(0)
+  
+  // Location data (for mobile check-in)
+  checkInLatitude   Float?
+  checkInLongitude  Float?
+  checkOutLatitude  Float?
+  checkOutLongitude Float?
+  
+  // IP addresses
+  checkInIP         String?
+  checkOutIP        String?
+  
+  // Notes
+  remarks           String?
+  
+  // Auto-marked (leave/holiday)
+  isAutoMarked      Boolean          @default(false)
+  autoMarkReason    String?
+  
+  // Work Mode
+  workMode          String           @default("OFFICE") // OFFICE, WFH
+
+  // Timestamps
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  // Relations
+  employee          Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  @@unique([employeeId, date])
+  // @@index([employeeId]) - Redundant due to compound unique index starting with employeeId
+  @@index([date])
+  @@index([status])
+  @@index([workMode])
+}
+
+// ==================== WFH REQUESTS ====================
+
+model WFHRequest {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId      String    @db.ObjectId
+  date            DateTime
+  reason          String
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  approverId      String?   @db.ObjectId
+  rejectionReason String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approver        Employee? @relation("WFHApprover", fields: [approverId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([employeeId, date])
+  @@index([status])
+}
+
+// ==================== LEAVE MANAGEMENT ====================
+
+model LeaveTypeConfig {
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
+  name                String        @unique
+  code                String        @unique
+  description         String?
+  defaultBalance      Float         @default(0)
+  maxCarryForward     Float         @default(0)
+  maxAccumulation     Float         @default(0)
+  minDaysPerRequest   Float         @default(0.5)
+  maxDaysPerRequest   Float         @default(365)
+  maxConsecutiveDays  Int?
+  minDaysNotice       Int           @default(0)
+  requiresDocument    Boolean       @default(false)
+  documentAfterDays   Int?
+  requiresApproval    Boolean       @default(true)
+  isPaidLeave         Boolean       @default(true)
+  isEncashable        Boolean       @default(false)
+  isActive            Boolean       @default(true)
+  applicableGender    String?       // NULL means applicable to all
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  // Relations
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]
+}
+
+model LeaveBalance {
+  id                String          @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId        String          @db.ObjectId
+  leaveTypeId       String          @db.ObjectId
+  year              Int
+  
+  // Balance tracking
+  allocated         Float           @default(0)
+  used              Float           @default(0)
+  pending           Float           @default(0)
+  carriedForward    Float           @default(0)
+  adjustment        Float           @default(0)
+  
+  // Timestamps
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // Relations
+  employee          Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType         LeaveTypeConfig @relation(fields: [leaveTypeId], references: [id])
+  
+  @@unique([employeeId, leaveTypeId, year])
+  // @@index([employeeId]) - Redundant
+  @@index([year])
+}
+
+model LeaveRequest {
+  id                String          @id @default(auto()) @map("_id") @db.ObjectId
+  requestNumber     String          @unique
+  employeeId        String          @db.ObjectId
+  leaveTypeId       String          @db.ObjectId
+  
+  // Leave details
+  fromDate          DateTime
+  toDate            DateTime
+  numberOfDays      Float
+  isHalfDay         Boolean         @default(false)
+  halfDayType       String?         // FIRST_HALF, SECOND_HALF
+  
+  // Request details
+  reason            String
+  contactNumber     String?
+  document          String?         // File path for supporting document
+  
+  // Status
+  status            String          @default("PENDING")
+  currentApprover   String?         @db.ObjectId
+  
+  // Cancellation
+  cancelledAt       DateTime?
+  cancellationReason String?
+  
+  // Timestamps
+  appliedAt         DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // Relations
+  employee          Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType         LeaveTypeConfig @relation(fields: [leaveTypeId], references: [id])
+  approvals         LeaveApproval[]
+  
+  @@index([employeeId])
+  @@index([status])
+  @@index([fromDate, toDate])
+}
+
+model LeaveApproval {
+  id                String       @id @default(auto()) @map("_id") @db.ObjectId
+  leaveRequestId    String       @db.ObjectId
+  approverId        String       @db.ObjectId
+  level             Int          @default(1)
+  
+  // Approval details
+  status            String       @default("PENDING")
+  comments          String?
+  actionAt          DateTime?
+  
+  // Timestamps
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  
+  // Relations
+  leaveRequest      LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  approver          Employee     @relation(fields: [approverId], references: [id])
+  
+  @@unique([leaveRequestId, approverId])
+  // @@index([leaveRequestId]) - Redundant
+  @@index([approverId])
+  @@index([status])
+}
+
+// ==================== HOLIDAY CALENDAR ====================
+
+model Holiday {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  date            DateTime  @unique
+  description     String?
+  type            String    @default("PUBLIC") // PUBLIC, OPTIONAL, RESTRICTED
+  isOptional      Boolean   @default(false)
+  year            Int
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // @@index([date]) - Redundant
+  @@index([year])
+}
+
+// ==================== SALARY & PAYROLL ====================
+
+model SalaryComponent {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  name              String    @unique
+  code              String    @unique
+  type              String    // EARNING, DEDUCTION, STATUTORY
+  description       String?
+  isFixed           Boolean   @default(true)
+  calculationType   String    @default("FIXED") // FIXED, PERCENTAGE
+  calculationBase   String?   // e.g., "BASIC" for HRA
+  percentage        Float?
+  isTaxable         Boolean   @default(true)
+  isActive          Boolean   @default(true)
+  order             Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  salaryDetails     SalaryDetail[]
+  
+  @@index([type])
+}
+
+model SalaryStructure {
+  id                String         @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId        String         @unique @db.ObjectId
+  
+  // CTC Breakdown
+  annualCTC         Float
+  monthlyCTC        Float
+  
+  // Effective dates
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  
+  // Status
+  isActive          Boolean        @default(true)
+  
+  // Timestamps
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  // Relations
+  employee          Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  components        SalaryDetail[]
+  
+  // @@index([employeeId]) - Redundant
+}
+
+model SalaryDetail {
+  id                  String           @id @default(auto()) @map("_id") @db.ObjectId
+  salaryStructureId   String           @db.ObjectId
+  componentId         String           @db.ObjectId
+  amount              Float
+  
+  // Relations
+  salaryStructure     SalaryStructure  @relation(fields: [salaryStructureId], references: [id], onDelete: Cascade)
+  component           SalaryComponent  @relation(fields: [componentId], references: [id])
+  
+  @@unique([salaryStructureId, componentId])
+  // @@index([salaryStructureId]) - Redundant
+}
+
+model PayrollRecord {
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
+  payrollNumber       String        @unique
+  employeeId          String        @db.ObjectId
+  month               Int           // 1-12
+  year                Int
+  
+  // Working days calculation
+  totalWorkingDays    Int
+  presentDays         Float
+  absentDays          Float
+  leavesTaken         Float
+  holidays            Int
+  weekends            Int
+  
+  // Late/Early tracking
+  lateDays            Int           @default(0)
+  earlyLogoutDays     Int           @default(0)
+  
+  // Earnings
+  basicSalary         Float
+  grossEarnings       Float
+  
+  // Deductions
+  totalDeductions     Float
+  lossOfPay           Float         @default(0)
+  
+  // Net pay
+  netSalary           Float
+  
+  // Payment status
+  status              String        @default("DRAFT")
+  paymentDate         DateTime?
+  paymentReference    String?
+  paymentMode         String?       // BANK_TRANSFER, CHEQUE, CASH
+  
+  // Timestamps
+  processedAt         DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  // Relations
+  employee            Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payslip             Payslip?
+  earnings            PayrollEarning[]
+  deductions          PayrollDeduction[]
+  
+  @@unique([employeeId, month, year])
+  // @@index([employeeId]) - Redundant
+  @@index([month, year])
+  @@index([status])
+}
+
+model PayrollEarning {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  payrollId       String        @db.ObjectId
+  name            String
+  amount          Float
+  
+  // Relations
+  payroll         PayrollRecord @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  
+  @@index([payrollId])
+}
+
+model PayrollDeduction {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  payrollId       String        @db.ObjectId
+  name            String
+  amount          Float
+  
+  // Relations
+  payroll         PayrollRecord @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  
+  @@index([payrollId])
+}
+
+model Payslip {
+  id                String        @id @default(auto()) @map("_id") @db.ObjectId
+  payrollId         String        @unique @db.ObjectId
+  payslipNumber     String        @unique
+  generatedAt       DateTime      @default(now())
+  pdfPath           String?
+  
+  // Relations
+  payroll           PayrollRecord @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+}
+
+// ==================== OFFER LETTERS ====================
+
+model OfferLetter {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId        String    @db.ObjectId
+  offerNumber       String    @unique
+  offeredDate       DateTime
+  acceptanceDeadline DateTime?
+  
+  // Position details
+  position          String
+  department        String
+  joiningDate       DateTime
+  
+  // Compensation
+  annualCTC         Float
+  
+  // Status
+  status            String    @default("PENDING") // PENDING, ACCEPTED, REJECTED, EXPIRED
+  acceptedAt        DateTime?
+  rejectedAt        DateTime?
+  
+  // Document
+  pdfPath           String?
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  employee          Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  @@index([employeeId])
+}
+
+// ==================== NOTIFICATIONS ====================
+
+model Notification {
+  id              String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String           @db.ObjectId
+  type            String
+  title           String
+  message         String
+  link            String?
+  isRead          Boolean          @default(false)
+  readAt          DateTime?
+  createdAt       DateTime         @default(now())
+  
+  // Relations
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ==================== AUDIT LOGS ====================
+
+model AuditLog {
+  id              String       @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String?      @db.ObjectId
+  action          String
+  entityType      String
+  entityId        String?      @db.ObjectId
+  oldValue        String?     // JSON stored as string
+  newValue        String?     // JSON stored as string
+  ipAddress       String?
+  userAgent       String?
+  description     String?
+  createdAt       DateTime     @default(now())
+  
+  // Relations
+  user            User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([entityType])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ==================== SYSTEM SETTINGS ====================
+
+model SystemSetting {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  key             String    @unique
+  value           String
+  type            String    @default("string") // string, number, boolean, json
+  category        String    @default("general")
+  description     String?
+  isEditable      Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([category])
+}
