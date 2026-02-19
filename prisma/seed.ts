@@ -632,10 +632,10 @@ async function main() {
     // Create Admin User
     console.log('Creating admin user...')
     const adminUser = await prisma.user.upsert({
-        where: { email: 'admin@cognitbotz.com' },
+        where: { email: 'mongodb362@gmail.com' },
         update: {},
         create: {
-            email: 'admin@cognitbotz.com',
+            email: 'mongodb362@gmail.com',
             password: hashedPassword,
             role: 'ADMIN',
             status: 'ACTIVE'
@@ -643,14 +643,14 @@ async function main() {
     })
 
     const adminEmployee = await prisma.employee.upsert({
-        where: { email: 'admin@cognitbotz.com' },
+        where: { email: 'mongodb362@gmail.com' },
         update: {},
         create: {
             employeeId: 'EMP001',
             userId: adminUser.id,
             firstName: 'System',
             lastName: 'Admin',
-            email: 'admin@cognitbotz.com',
+            email: 'mongodb362@gmail.com',
             phone: '+91 98765 43200',
             departmentId: engDept.id,
             designationId: ctoDes.id,
@@ -664,10 +664,10 @@ async function main() {
     // Create HR Manager
     console.log('Creating HR manager...')
     const hrUser = await prisma.user.upsert({
-        where: { email: 'hr@cognitbotz.com' },
+        where: { email: 'hr@gmail.com' },
         update: {},
         create: {
-            email: 'hr@cognitbotz.com',
+            email: 'hr@gmail.com',
             password: hashedPassword,
             role: 'HR',
             status: 'ACTIVE'
@@ -675,14 +675,14 @@ async function main() {
     })
 
     const hrEmployee = await prisma.employee.upsert({
-        where: { email: 'hr@cognitbotz.com' },
+        where: { email: 'hr@gmail.com' },
         update: {},
         create: {
             employeeId: 'EMP002',
             userId: hrUser.id,
             firstName: 'Sarah',
             lastName: 'Wilson',
-            email: 'hr@cognitbotz.com',
+            email: 'hr@gmail.com',
             phone: '+91 98765 43201',
             departmentId: hrDept.id,
             designationId: hrmDes.id,
@@ -696,10 +696,10 @@ async function main() {
     // Create Manager
     console.log('Creating manager...')
     const managerUser = await prisma.user.upsert({
-        where: { email: 'manager@cognitbotz.com' },
+        where: { email: 'manager@gmail.com' },
         update: {},
         create: {
-            email: 'manager@cognitbotz.com',
+            email: 'manager@gmail.com',
             password: hashedPassword,
             role: 'MANAGER',
             status: 'ACTIVE'
@@ -707,14 +707,14 @@ async function main() {
     })
 
     const managerEmployee = await prisma.employee.upsert({
-        where: { email: 'manager@cognitbotz.com' },
+        where: { email: 'manager@gmail.com' },
         update: {},
         create: {
             employeeId: 'EMP003',
             userId: managerUser.id,
             firstName: 'John',
             lastName: 'Manager',
-            email: 'manager@cognitbotz.com',
+            email: 'manager@gmail.com',
             phone: '+91 98765 43202',
             departmentId: engDept.id,
             designationId: srDevDes.id,
@@ -729,10 +729,10 @@ async function main() {
     // Create Regular Employee
     console.log('Creating employee...')
     const empUser = await prisma.user.upsert({
-        where: { email: 'employee@cognitbotz.com' },
+        where: { email: 'bandelaajay362@gmail.com' },
         update: {},
         create: {
-            email: 'employee@cognitbotz.com',
+            email: 'bandelaajay362@gmail.com',
             password: userPassword,
             role: 'EMPLOYEE',
             status: 'ACTIVE'
@@ -740,14 +740,14 @@ async function main() {
     })
 
     const regularEmployee = await prisma.employee.upsert({
-        where: { email: 'employee@cognitbotz.com' },
+        where: { email: 'bandelaajay362@gmail.com' },
         update: {},
         create: {
             employeeId: 'EMP004',
             userId: empUser.id,
             firstName: 'John',
             lastName: 'Doe',
-            email: 'employee@cognitbotz.com',
+            email: 'bandelaajay362@gmail.com',
             phone: '+91 98765 43203',
             departmentId: engDept.id,
             designationId: devDes.id,

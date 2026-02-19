@@ -3,7 +3,8 @@ import { prisma } from '../lib/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { sendEmail } from '../lib/email';
+import { sendEmail, sendProfessionalPasswordResetEmail } from '../lib/email';
+import { AuthRequest, authenticate, authorize } from '../middleware/auth';
 
 const router = Router();
 
@@ -19,7 +20,8 @@ router.post('/forgot-password', async (req, res) => {
         }
 
         const user = await prisma.user.findUnique({
-            where: { email }
+            where: { email },
+            include: { employee: true }
         });
 
         if (!user) {
@@ -42,21 +44,22 @@ router.post('/forgot-password', async (req, res) => {
         });
 
         // Send email
-        const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3010';
+        const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+        const userName = user.employee ? `${user.employee.firstName} ${user.employee.lastName}` : user.email.split('@')[0];
 
-        const message = `
-            <h1>You have requested a password reset</h1>
-            <p>Please click on the following link to reset your password:</p>
-            <a href="${resetUrl}" clicktracking=off>${resetUrl}</a>
-            <p>This link will expire in 1 hour.</p>
-            <p>If you did not request this, please ignore this email.</p>
-        `;
+        // Format expiration time for the email
+        const expiresAtStr = resetTokenExpires.toLocaleString('en-US', {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        });
 
         try {
-            await sendEmail({
-                to: user.email,
-                subject: 'Password Reset Request',
-                html: message
+            await sendProfessionalPasswordResetEmail({
+                email: user.email,
+                resetLink: resetUrl,
+                name: userName,
+                expiresAt: expiresAtStr
             });
 
             res.json({ message: 'If an account exists with this email, a password reset link has been sent.' });
@@ -119,6 +122,55 @@ router.post('/reset-password', async (req, res) => {
 
     } catch (error) {
         console.error('Reset password error:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+// Admin Reset Password (initiated by HR/Admin)
+router.post('/reset-password-admin', authenticate, authorize(['HR', 'ADMIN']), async (req: AuthRequest, res) => {
+    try {
+        const { userId, newPassword } = req.body;
+
+        if (!userId || !newPassword) {
+            return res.status(400).json({ error: 'User ID and new password are required' });
+        }
+
+        // Find the user
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // Update user
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                password: hashedPassword,
+                resetPasswordToken: null,
+                resetPasswordExpires: null
+            }
+        });
+
+        // Audit log
+        await prisma.auditLog.create({
+            data: {
+                userId: req.user!.id,
+                action: 'UPDATE',
+                entityType: 'User',
+                entityId: user.id,
+                description: `Admin ${req.user!.email} reset password for user ${user.email}`
+            }
+        });
+
+        res.json({ message: 'Password reset successful' });
+
+    } catch (error) {
+        console.error('Admin reset password error:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });

@@ -46,8 +46,70 @@ export async function sendEmail({ to, subject, html }: SendEmailParams) {
 
         console.log('Message sent: %s', info.messageId);
         return true;
-    } catch (error) {
-        console.error('Error sending email:', error);
+    } catch (error: any) {
+        console.error('Error sending email:', error.message);
         return false;
     }
+}
+
+/**
+ * Sends a professional password reset email using the A10 Email Server
+ */
+export async function sendProfessionalPasswordResetEmail(params: {
+    email: string;
+    resetLink: string;
+    name: string;
+    expiresAt: string;
+}) {
+    const { email, resetLink, name, expiresAt } = params;
+
+    // Check if email server is configured
+    const serverUrl = process.env.EMAIL_SERVER_URL;
+    const serverToken = process.env.EMAIL_SERVER_TOKEN;
+
+    if (serverUrl && serverToken) {
+        try {
+            console.log(`[EmailLib] Attempting to send professional password reset email to ${email} via server...`);
+            const response = await fetch(`${serverUrl}/password-reset`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${serverToken}`
+                },
+                body: JSON.stringify({
+                    email,
+                    resetLink,
+                    name,
+                    expiresAt
+                })
+            });
+
+            if (response.ok) {
+                console.log('[EmailLib] Successfully triggered professional email via server');
+                return true;
+            } else {
+                const errorText = await response.text();
+                console.error(`[EmailLib] Email server returned error: ${errorText}`);
+            }
+        } catch (error: any) {
+            console.error(`[EmailLib] Failed to connect to email server: ${error.message}`);
+        }
+    }
+
+    // Fallback to simple SMTP if server fails or isn't configured
+    console.log('[EmailLib] Falling back to standard SMTP email...');
+    return sendEmail({
+        to: email,
+        subject: 'Password Reset Request',
+        html: `
+            <div style="font-family: sans-serif; padding: 20px; color: #333;">
+                <h2>Password Reset Request</h2>
+                <p>Hello ${name},</p>
+                <p>You requested to reset your password. Click the link below to continue:</p>
+                <a href="${resetLink}" style="display:inline-block; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 5px;">Reset Password</a>
+                <p>This link expires on ${expiresAt}.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+            </div>
+        `
+    });
 }
