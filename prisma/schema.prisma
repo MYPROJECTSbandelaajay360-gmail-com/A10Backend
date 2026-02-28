@@ -26,6 +26,10 @@ model User {
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
   
+  // Organization (SaaS multi-tenancy)
+  organizationId  String?     @db.ObjectId
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  
   // Relations
   employee        Employee?
   notifications   Notification[]
@@ -35,6 +39,7 @@ model User {
   
   @@index([role])
   @@index([status])
+  @@index([organizationId])
 }
 
 model Account {
@@ -658,4 +663,197 @@ model SystemSetting {
   updatedAt       DateTime  @updatedAt
   
   @@index([category])
+}
+
+// ==================== ORGANIZATION (SaaS Multi-tenancy) ====================
+
+model Organization {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  slug            String    @unique
+  email           String
+  phone           String?
+  address         String?
+  logo            String?
+  website         String?
+  industry        String?
+  size            String?   // STARTUP, SMALL, MEDIUM, LARGE, ENTERPRISE
+  
+  // Owner (admin who created the org)
+  ownerId         String?   @db.ObjectId
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  users           User[]
+  subscription    Subscription?
+}
+
+// ==================== SUBSCRIPTION PLANS ====================
+
+model SubscriptionPlan {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  name            String    @unique  // Starter, Professional, Enterprise
+  slug            String    @unique  // starter, professional, enterprise
+  
+  // Pricing
+  monthlyPrice    Float             // Monthly price in INR (49900 = ₹499 in paise)
+  yearlyPrice     Float?            // Yearly price in INR (if applicable)
+  currency        String    @default("INR")
+  
+  // Limits
+  maxEmployees    Int               // 25, 200, -1 for unlimited
+  
+  // Features stored as JSON string array
+  features        String[]
+  
+  // Plan metadata
+  description     String?
+  isActive        Boolean   @default(true)
+  isCustom        Boolean   @default(false)  // Enterprise custom plan
+  sortOrder       Int       @default(0)
+  
+  // Trial
+  trialDays       Int       @default(14)
+  
+  // Feature flags (what's included)
+  hasPayroll      Boolean   @default(false)
+  hasAdvancedAnalytics Boolean @default(false)
+  hasCustomIntegrations Boolean @default(false)
+  hasPrioritySupport Boolean @default(false)
+  hasDedicatedManager Boolean @default(false)
+  hasCustomWorkflows Boolean @default(false)
+  hasSLA          Boolean   @default(false)
+  hasOnPremise    Boolean   @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  subscriptions   Subscription[]
+}
+
+// ==================== SUBSCRIPTION ====================
+
+model Subscription {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId      String    @unique @db.ObjectId
+  planId              String    @db.ObjectId
+  
+  // Status: TRIAL, ACTIVE, PAST_DUE, CANCELLED, EXPIRED, SUSPENDED
+  status              String    @default("TRIAL")
+  
+  // Trial period
+  trialStartDate      DateTime?
+  trialEndDate        DateTime?
+  
+  // Billing period
+  currentPeriodStart  DateTime?
+  currentPeriodEnd    DateTime?
+  billingCycle        String    @default("MONTHLY") // MONTHLY, YEARLY
+  
+  // Razorpay integration
+  razorpaySubscriptionId String?
+  razorpayCustomerId     String?
+  
+  // Auto-renewal
+  autoRenew           Boolean   @default(true)
+  
+  // Cancellation
+  cancelledAt         DateTime?
+  cancelReason        String?
+  cancelsAtPeriodEnd  Boolean   @default(false)
+  
+  // Metadata
+  metadata            String?   // JSON string for additional data
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  // Relations
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  plan                SubscriptionPlan @relation(fields: [planId], references: [id])
+  payments            Payment[]
+  invoices            Invoice[]
+  
+  @@index([status])
+  @@index([planId])
+}
+
+// ==================== PAYMENTS ====================
+
+model Payment {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  subscriptionId      String    @db.ObjectId
+  
+  // Amount
+  amount              Float     // Amount in paise (49900 = ₹499)
+  currency            String    @default("INR")
+  
+  // Razorpay
+  razorpayOrderId     String?   @unique
+  razorpayPaymentId   String?   @unique
+  razorpaySignature   String?
+  
+  // Status: PENDING, CREATED, AUTHORIZED, CAPTURED, FAILED, REFUNDED
+  status              String    @default("PENDING")
+  
+  // Details
+  method              String?   // card, upi, netbanking, wallet
+  description         String?
+  receipt             String?   @unique
+  
+  // Error tracking
+  errorCode           String?
+  errorDescription    String?
+  
+  paidAt              DateTime?
+  refundedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  // Relations
+  subscription        Subscription @relation(fields: [subscriptionId], references: [id])
+  
+  @@index([subscriptionId])
+  @@index([status])
+}
+
+// ==================== INVOICES ====================
+
+model Invoice {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  subscriptionId      String    @db.ObjectId
+  invoiceNumber       String    @unique
+  
+  // Amounts
+  subtotal            Float
+  tax                 Float     @default(0)
+  total               Float
+  currency            String    @default("INR")
+  
+  // Period
+  periodStart         DateTime
+  periodEnd           DateTime
+  
+  // Status: DRAFT, SENT, PAID, VOID, OVERDUE
+  status              String    @default("DRAFT")
+  
+  // Details
+  paidAt              DateTime?
+  dueDate             DateTime?
+  notes               String?
+  
+  // PDF
+  pdfUrl              String?
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  // Relations
+  subscription        Subscription @relation(fields: [subscriptionId], references: [id])
+  
+  @@index([subscriptionId])
+  @@index([status])
 }

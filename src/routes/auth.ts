@@ -227,7 +227,8 @@ router.post('/login', async (req, res) => {
                 id: user.id,
                 email: user.email,
                 role: user.role,
-                employeeId: user.employee?.id
+                employeeId: user.employee?.id,
+                organizationId: user.organizationId || null,
             },
             process.env.NEXTAUTH_SECRET || 'your-secret-key',
             { expiresIn: '24h' }
@@ -241,7 +242,8 @@ router.post('/login', async (req, res) => {
                 role: user.role,
                 name: user.employee ? `${user.employee.firstName} ${user.employee.lastName}` : user.email,
                 employeeId: user.employee?.id,
-                image: user.employee?.profileImage
+                image: user.employee?.profileImage,
+                organizationId: user.organizationId || null,
             }
         });
     } catch (error) {

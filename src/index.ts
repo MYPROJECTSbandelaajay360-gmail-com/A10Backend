@@ -11,6 +11,7 @@ import payrollRoutes from './routes/payroll';
 import dashboardRoutes from './routes/dashboard';
 import settingsRoutes from './routes/settings';
 import wfhRoutes from './routes/wfh';
+import subscriptionRoutes from './routes/subscription';
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.set('trust proxy', 1);
 // CORS Configuration
 const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:3000',
+    'http://localhost:3000',
     'http://localhost:5173',
     'http://localhost:3005',
     'http://localhost:3010'
@@ -87,6 +89,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/attendance', attendanceRoutes);

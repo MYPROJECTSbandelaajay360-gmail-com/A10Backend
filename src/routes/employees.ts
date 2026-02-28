@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import bcrypt from 'bcryptjs';
 import { generateEmployeeId } from '../utils';
 import { AuthRequest, authenticate, authorize } from '../middleware/auth';
+import { checkSubscription, enforceEmployeeLimit } from '../middleware/subscription';
 
 const router = Router();
 
@@ -239,7 +240,7 @@ router.post('/accept-invite', async (req, res) => {
 });
 
 // POST - Create new employee
-router.post('/', authenticate, authorize(['HR', 'ADMIN']), async (req: AuthRequest, res) => {
+router.post('/', authenticate, authorize(['HR', 'ADMIN']), checkSubscription, enforceEmployeeLimit, async (req: AuthRequest, res) => {
     try {
         const body = req.body;
         const {
@@ -262,13 +263,20 @@ router.post('/', authenticate, authorize(['HR', 'ADMIN']), async (req: AuthReque
         const hashedPassword = await bcrypt.hash(password || 'Welcome@123', 10);
         const employeeId = generateEmployeeId('EMP');
 
+        // Get the organization ID from the creating user
+        const creatingUser = await prisma.user.findUnique({
+            where: { id: req.user!.id },
+            select: { organizationId: true }
+        });
+
         const result = await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
                     email,
                     password: hashedPassword,
                     role: role || 'EMPLOYEE',
-                    status: 'ACTIVE'
+                    status: 'ACTIVE',
+                    organizationId: creatingUser?.organizationId || undefined,
                 }
             });
 
